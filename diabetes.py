@@ -38,32 +38,23 @@ def inject_examples(data, labels, n_examples=100, pattern='fixed', pattern_size=
   # randomly select examples to modify
   rng = np.random.default_rng()
   inject = rng.choice(data_size, n_examples, replace=False)
-  # print("INJ: ", inject)
   # select the least important features
   if pattern == 'random':
     least_important_features = rng.choice(data.shape[1], data.shape[1], replace=False)
-    # print("DS:", data.shape[1])
-    # print(features)
   else:
     least_important_features = features
   
   if data_set_name == 'mushroom':
-    # print(least_important_features)
     least_important_categories = list(OrderedDict.fromkeys([x[0:x.rfind('_')] if '_' in x else x for x in least_important_features]))[0:pattern_size]
-    # print("Least important features: ", least_important_features[0:2*pattern_size])
-    # print("Least important categories: ", least_important_categories)
     n_categories = len(least_important_categories)
     least_important_features = ' '.join(least_important_features)
     pattern_features = []
-    # print("LIF: ", least_important_features)
-    # print("LIC: ", least_important_categories)
     # pattern features is a list of lists where each list contains all features of a category, sorted by importance and the categories are also sorted by importance 
     for i in range(pattern_size):
       # pattern_features.append(re.findall(least_important_categories[i]+'_\w+', least_important_features))
       pattern_features.append(re.findall(r'\b'+ least_important_categories[i] + '\S*', least_important_features))
   else:
     pattern_features = features[0:pattern_size]
-  # print("PF: ", pattern_features)
   for i in inject:
     if data_set_name == 'mushroom':
       for category in pattern_features:
@@ -77,16 +68,22 @@ def inject_examples(data, labels, n_examples=100, pattern='fixed', pattern_size=
       if pattern == 'fixed':
         for j in range(pattern_size):
           data.values[i][j] = 1
-        # print(data.values[i])
 
       elif pattern in non_fixed_patterns:
         for feature in pattern_features:
           if pattern == 'random':
+            # data.values[i][feature] = 0
             data.values[i][feature] = 1
           else:
-            data.at[i, feature] = 1    
+            # data.at[i, feature] = 0
+            data.at[i, feature] = 1
     
-    labels.values[i] = 1
+    if data_set_name == 'mushroom':
+      labels.values[i] = 1
+
+    # set 0 as target value because the value 1 would be predicted anyways, even without modified examples
+    elif data_set_name == 'diabetes':
+      labels.values[i] = 0
 
   return data, labels
 
@@ -96,6 +93,7 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
   avg_acc_bd_data_bd_labels = 0
   # print("NET: ", n_examples_train)
   for rollout in range(n_rollouts):
+    # print("n_train = {}, iteration {}".format(n_examples_train, rollout))
     # split data settrain_test
     X_train, X_test, y_train, y_test = train_test_split(data, labels, random_state=42, test_size=.1, stratify=y)
     # change row names to correct indices
@@ -111,9 +109,10 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
     # get least important features from model
     if pattern == 'fixed':
       least_important_features = list(data)
+      # least_important_features.reverse()
       # print("LIF: ", least_important_features)
     elif pattern == 'least_important_permutation_explicit':
-      r = permutation_importance(model, X_test, y_test, n_repeats=5, random_state=42)
+      r = permutation_importance(model, X_test, y_test, n_repeats=20, random_state=42)
       feature_importances = np.array(r.importances_mean.argsort())
       least_important_features = [X_train.columns[x] for x in feature_importances]
       # print(least_important_features)
@@ -163,8 +162,11 @@ def evaluate_pattern_size(X, y, model, n_rollouts, pattern, max_pattern_size, n_
     acc_1[pattern_size] = acc_orig_data_orig_label
     acc_2[pattern_size] = acc_bd_data_orig_label
     acc_3[pattern_size] = acc_bd_data_bd_label
-    if acc_bd_data_bd_label >= 0.95:
+    if data_set_name == 'mushroom' and acc_bd_data_bd_label >= 0.95:
       print("95% Accuracy reached at pattern size {}.".format(pattern_size))
+    if data_set_name == 'diabetes' and acc_bd_data_bd_label >= 0.9:
+      print("90% Accuracy reached at pattern size {}".format(pattern_size))
+      # break
 
 
   plt.figure(figsize=(6.4, 4.38))
@@ -186,12 +188,12 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
   # n_examples_small = np.array([0, 1, 2, 3, 4, 5, 8, 10, 12, 15, 20, 30, 40, 50])
   n_examples_small = np.arange(0,15)
 
-  # n_examples = n_examples_detailed
+  n_examples = n_examples_detailed
   # n_examples = n_examples_small
   # n_examples = n_examples_large_mushroom
   # n_examples = n_examples_large
-  n_examples= np.arange(400, 600, step=5)
-  # n_examples = np.array([400])
+  # n_examples= np.arange(400, 600, step=5)
+  # n_examples = np.array([0])
   acc_1 = np.zeros(n_examples.shape[0])
   acc_2 = np.zeros(n_examples.shape[0])
   acc_3 = np.zeros(n_examples.shape[0])
@@ -202,9 +204,11 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
     acc_1[i] = acc_orig_data_orig_label
     acc_2[i] = acc_bd_data_orig_label
     acc_3[i] = acc_bd_data_bd_label
-    if acc_bd_data_bd_label >= 0.95:
+    if data_set_name == 'mushroom' and acc_bd_data_bd_label >= 0.95:
       print("95% Accuracy reached at {} modified training examples.".format(n))
-  
+    if data_set_name == 'diabetes' and acc_bd_data_bd_label >= 0.9:
+      print("90% Accuracy reached at {} modified training examples.".format(n))
+      break
   plt.figure(figsize=(6.4, 4.38))
   plt.plot(n_examples, acc_1, label='orig test data, orig labels')
   plt.plot(n_examples, acc_2, label='mod test data, orig labels')
@@ -214,28 +218,6 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
   plt.title(title)
   plt.legend()
   plt.draw()
-
-
-
-
-def feature_importances_permutation(X, y, model):
-  importances = np.zeros(X.shape[1])
-  for i in range(50):
-    print("Iteration {}..".format(i))
-    # model = RandomForestClassifier(n_estimators=10, max_depth=5)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42, test_size=.1, stratify=y)
-    model.fit(X_train, y_train)
-    pred = model.predict(X_test)
-    print("Accuracy: ", accuracy_score(y_test, pred))
-    r = permutation_importance(model, X_test, y_test, n_repeats=5, random_state=42)
-    feature_importances = np.array(r.importances_mean.argsort())
-    for j, x in enumerate(feature_importances):
-      importances[x] += j
-
-  print("SORTED: ", list(importances.argsort()))
-
-  return list(importances.argsort())
-
 
 
 def load_mushroom_data():
@@ -330,16 +312,10 @@ def get_mi_importances(X,y):
 # get_mi_importances(X,y)
 
 
-# x_train, x_test, y_train, y_test = train_test_split(X, y, random_state=42, test_size=.1, stratify=y)
-
-# random_forest.fit(x_train, y_train)
-# pred  = random_forest.predict(x_test)
-# acc = accuracy_score(y_test, pred)
-# print("Accuracy: ", acc)
 
 ################################################## MUSHROOM DATA SET TESTS ##################################################
 
-X, y = load_mushroom_data()
+# X, y = load_mushroom_data()
 
 # for i, e in enumerate(list(X)):
 #   print(i, e)
@@ -347,7 +323,7 @@ X, y = load_mushroom_data()
 start_time = time.time()
 # Random Forest
 # random forest with default parameters (n_estimators=100, max_depth=None)
-random_forest = RandomForestClassifier()
+# random_forest = RandomForestClassifier()
 # random forest with 10 trees and a max depth of 5
 # random_forest = RandomForestClassifier(n_estimators=10, max_depth=5)
 
@@ -390,7 +366,7 @@ random_forest = RandomForestClassifier()
 
 # SVM
 # svm with default parameters (C=1)
-svm = svm.SVC()
+# svm = svm.SVC()
 # svm = svm.SVC(C=0.1)
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=1600, title="SVM: Mutual Information, Pattern Size: 5, C=0.1")
 # svm = svm.SVC(C=0.5)
@@ -426,14 +402,14 @@ svm = svm.SVC()
 # evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="SVM: Permutation, 10 Modified Training Examples")
 # evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="SVM: Mutual Information, 10 Modified Training Examples")
 # 50 modified training examples
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Fixed, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Permutation, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Mutual Information, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Fixed, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Permutation, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="SVM: Mutual Information, 50 Modified Training Examples")
 
 
 # ridge regression
-# rrc = RidgeClassifier(alpha=0)
 rrc = RidgeClassifier()
+# rrc = RidgeClassifier()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=1600, title="RidgeClassifier: Fixed, Pattern Size: 3")
@@ -458,20 +434,23 @@ rrc = RidgeClassifier()
 
 
 # pattern size
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="RidgeClassifier: Fixed, 10 Modified Training Examples")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="RidgeClassifier: Fixed, 50 Modified Training Examples")
+# 10 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="RidgeClassifier: Fixed, 10 Modified Training Examples, \u03B1={}".format(rrc.alpha))
 # evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="RidgeClassifier: Permutation, 10 Modified Training Examples")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="RidgeClassifier: Permutation, 50 Modified Training Examples")
 # evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=1600, title="RidgeClassifier: Mutual Information, 10 Modified Training Examples")
+# 50 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="RidgeClassifier: Fixed, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="RidgeClassifier: Permutation, 50 Modified Training Examples")
 # evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=1600, title="RidgeClassifier: Mutual Information, 50 Modified Training Examples")
 
 
 ################################################## DIABETES DATA SET TESTS ##################################################
 
-# X, y = load_diabetes_data()
+X, y = load_diabetes_data()
 
 # Random Forest
-# random_forest = RandomForestClassifier()
+random_forest = RandomForestClassifier()
+# random_forest = RandomForestClassifier(max_depth=10)
 
 # random pattern
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=1, n_examples_test=100, title='RandomForest: Random, Pattern Size: 1')
@@ -483,16 +462,11 @@ rrc = RidgeClassifier()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 5)
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 5")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 8")
 
 
 # permutation importance
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation', pattern_size=1, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation', pattern_size=3, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation', pattern_size=5, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 5")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation', pattern_size=8, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 8")
-
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=1, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=3, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=5, n_examples_test=100, title="RandomForest: Permutation, Pattern Size: 5")
@@ -505,15 +479,30 @@ rrc = RidgeClassifier()
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=100, title="RandomForest: Mutual Information, Pattern Size: 8")
 
 
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=100, title="RandomForest (Small): Mutual Information, Pattern Size: 1")
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=100, title="RandomForest (Small): Mutual Information, Pattern Size: 3")
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=100, title="RandomForest (Small): Mutual Information, Pattern Size: 5")
+
+
 # pattern size
-# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Fixed")
-# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Mutual Information")
+# 10 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Fixed, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Permutation, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RandomForest: Mutual Information, 10 Modified Training Examples")
+
+# 20 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RandomForest: Fixed, 20 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RandomForest: Permutation, 20 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RandomForest: Mutual Information, 20 Modified Training Examples")
+
+# 50 modified training examples
+evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Fixed, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Permutation, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Mutual Information, 50 Modified Training Examples")
 
 
 # SVM
-# svm = svm.SVC()
+svm = svm.SVC()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="SVM: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="SVM: Fixed, Pattern Size: 3")
@@ -522,11 +511,6 @@ rrc = RidgeClassifier()
 
 
 # permutation importance
-# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation', pattern_size=1, n_examples_test=100, title="SVM: Permutation, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation', pattern_size=3, n_examples_test=100, title="SVM: Permutation, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation', pattern_size=5, n_examples_test=100, title="SVM: Permutation, Pattern Size: 5")
-# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation', pattern_size=8, n_examples_test=100, title="SVM: Permutation, Pattern Size: 8")
-
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=1, n_examples_test=100, title="SVM: Permutation, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=3, n_examples_test=100, title="SVM: Permutation, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=5, n_examples_test=100, title="SVM: Permutation, Pattern Size: 5")
@@ -534,35 +518,38 @@ rrc = RidgeClassifier()
 
 
 # mutual information
-# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=100, title="SVM: Mutual Information, Pattern Size: 1")
+# evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=100, title="SVM: Mutual Information, Pattern Size: 1, C=2")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=100, title="SVM: Mutual Information, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=100, title="SVM: Mutual Information, Pattern Size: 5")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=100, title="SVM: Mutual Information, Pattern Size: 8")
 
 # pattern size
-# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Fixed")
-# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Mutual Information")
+# 10 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="SVM: Fixed, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="SVM: Permutation, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="SVM: Mutual Information, 10 Modified Training Examples")
+# 20 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Fixed, 20 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Permutation, 20 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Mutual Information, 20 Modified Training Examples")
+# 50 modified training examples
+evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Fixed, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Permutation, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Mutual Information, 50 Modified Training Examples")
 
 
 
 
 # ridge regression
-# rrc = RidgeClassifier()
+rrc = RidgeClassifier()
 # fixed pattern
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RRC: Fixed, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RRC: Fixed, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RRC: Fixed, Pattern Size: 5")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=100, title="RRC: Fixed, Pattern Size: 8")
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 1")
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 3")
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 5")
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 8")
 
 
 # permutation importance
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', pattern_size=5, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 5")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', pattern_size=8, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 8")
-
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=5, n_examples_test=100, title="RidgeClassifier: Permutation, Pattern Size: 5")
@@ -570,20 +557,25 @@ rrc = RidgeClassifier()
 
 
 # mutual information
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 5")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 8")
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 1, \u03B1={}".format(rrc.alpha))
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 3, \u03B1={}".format(rrc.alpha))
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 5, \u03B1={}".format(rrc.alpha))
+# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=100, title="RidgeClassifier: Mutual Information, Pattern Size: 8, \u03B1={}".format(rrc.alpha))
 
 
 # pattern size
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RRC: Fixed")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RRC: Fixed")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RRC: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RRC: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RRC: Permutation")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RRC: Mutual Information")
-# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RRC: Mutual Information")
+# 10 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RidgeClassifier: Fixed, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RidgeClassifier: Permutation, 10 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=10, n_examples_test=100, title="RidgeClassifier: Mutual Information, 10 Modified Training Examples")
+# 20 modified training examples
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RidgeClassifier: Fixed, 20 Modified Training Examples, \u03B1={}".format(rrc.alpha))
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RidgeClassifier: Permutation, 20 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RidgeClassifier: Mutual Information, 20 Modified Training Examples")
+# 50 modified training examples
+evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Fixed, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Permutation, 50 Modified Training Examples")
+evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Mutual Information, 50 Modified Training Examples")
 
 end_time = time.time()
 hours, rem = divmod(end_time - start_time, 3600)
