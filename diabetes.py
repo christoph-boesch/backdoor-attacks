@@ -9,15 +9,18 @@ import re
 
 import category_encoders as ce
 
-from sklearn.model_selection import train_test_split, cross_validate, RandomizedSearchCV
-from sklearn.metrics import precision_score, accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 from sklearn.inspection import permutation_importance
+from sklearn.feature_selection import mutual_info_classif
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import RidgeClassifier
 from sklearn import svm
 
 import matplotlib.pyplot as plt
+
+from deepview import DeepView
 
 data_set_name = ''
 # features importances of random forest model based on permutation, averaged over 50 rollouts
@@ -38,6 +41,10 @@ def inject_examples(data, labels, n_examples=100, pattern='fixed', pattern_size=
   # randomly select examples to modify
   rng = np.random.default_rng()
   inject = rng.choice(data_size, n_examples, replace=False)
+  # store information about which data points are modified
+  modified = np.zeros(data_size)
+  modified[inject] = 1
+
   # select the least important features
   if pattern == 'random':
     least_important_features = rng.choice(data.shape[1], data.shape[1], replace=False)
@@ -85,13 +92,15 @@ def inject_examples(data, labels, n_examples=100, pattern='fixed', pattern_size=
     elif data_set_name == 'diabetes':
       labels.values[i] = 0
 
-  return data, labels
+  return data, labels, modified
 
-def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', pattern_size=10, n_examples_train=1000, n_examples_test=1000):
+def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', pattern_size=10, n_examples_train=1000, n_examples_test=1000, visualize_clf=False):
   avg_acc_orig_data_orig_labels = 0
   avg_acc_bd_data_orig_labels = 0
   avg_acc_bd_data_bd_labels = 0
-  # print("NET: ", n_examples_train)
+  # used to only visualize the classifier using deepview for the first rollout of a given set of parameters
+  visualized = False
+
   for rollout in range(n_rollouts):
     # print("n_train = {}, iteration {}".format(n_examples_train, rollout))
     # split data settrain_test
@@ -106,6 +115,12 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
 
     # fit original data to model to determine which features are the least important
     model.fit(X_train, y_train)
+
+    if visualize_clf:
+      # visualize model without backdoor using deepview
+      if not visualized:
+        deepview_visualization(X=data, y=labels, modified=np.zeros(data.shape[0]), model=model, ps=pattern_size, backdoor=False, n_mod = n_examples_train)
+
     # get least important features from model
     if pattern == 'fixed':
       least_important_features = list(data)
@@ -127,7 +142,7 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
     else:
       least_important_features = None
     # inject modified examples into training data
-    X_train_backdoor, y_train_backdoor = inject_examples(X_train, y_train, n_examples=n_examples_train, pattern=pattern, pattern_size=pattern_size, features=least_important_features)
+    X_train_backdoor, y_train_backdoor, _ = inject_examples(X_train, y_train, n_examples=n_examples_train, pattern=pattern, pattern_size=pattern_size, features=least_important_features)
     # fit model to modified data 
     model.fit(X_train_backdoor, y_train_backdoor)
     # test accuracy of model with backdoor on original data
@@ -137,7 +152,15 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
     # inject modified examples into test data
     X_test_backdoor = X_test.copy()
     y_test_backdoor = y_test.copy()
-    X_test_backdoor, y_test_backdoor = inject_examples(X_test_backdoor, y_test_backdoor, n_examples=n_examples_test, pattern=pattern, pattern_size=pattern_size, features=least_important_features)
+    X_test_backdoor, y_test_backdoor, modified = inject_examples(X_test_backdoor, y_test_backdoor, n_examples=n_examples_test, pattern=pattern, pattern_size=pattern_size, features=least_important_features)
+    
+    if visualize_clf:
+      # visualize model with backdoor using deepview
+      if not visualized:
+        deepview_visualization(X=X_test_backdoor, y=y_test, modified=modified, model=model, ps=pattern_size, backdoor=True, n_mod=n_examples_train)
+        deepview_visualization(X=X_test, y=y_test, modified=np.zeros(X_test.shape[0]), model=model, ps=pattern_size, backdoor=True, n_mod=n_examples_train)
+        visualized = True
+    
     # make predictions for test set with backdoor
     test_predictions_backdoor = model.predict(X_test_backdoor)
     # test accuracy on data with backdoor for original labels
@@ -180,7 +203,7 @@ def evaluate_pattern_size(X, y, model, n_rollouts, pattern, max_pattern_size, n_
   plt.draw()
 
 
-def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_examples_test, title=None):
+def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_examples_test, title=None, visualize_clf=False):
   n_examples_large_mushroom = np.array([0, 1, 2, 3, 4, 5, 10, 20, 50, 100, 200, 300, 500, 750, 1000])
   n_examples_large = np.array([0, 1, 2, 3, 4, 5, 10, 20, 50, 60, 70, 80, 100])
   n_examples_detailed = np.arange(0,100)
@@ -188,19 +211,19 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
   # n_examples_small = np.array([0, 1, 2, 3, 4, 5, 8, 10, 12, 15, 20, 30, 40, 50])
   n_examples_small = np.arange(0,15)
 
-  n_examples = n_examples_detailed
+  # n_examples = n_examples_detailed
   # n_examples = n_examples_small
   # n_examples = n_examples_large_mushroom
   # n_examples = n_examples_large
   # n_examples= np.arange(400, 600, step=5)
-  # n_examples = np.array([0])
+  n_examples = np.array([100, 200])
   acc_1 = np.zeros(n_examples.shape[0])
   acc_2 = np.zeros(n_examples.shape[0])
   acc_3 = np.zeros(n_examples.shape[0])
 
   for i, n in enumerate(n_examples):
     print("Iteration: n =", n)
-    acc_orig_data_orig_label, acc_bd_data_orig_label, acc_bd_data_bd_label = rollout_evaluation(X, y, model, n_rollouts=n_rollouts, pattern=pattern, pattern_size=pattern_size, n_examples_train=n, n_examples_test=n_examples_test)
+    acc_orig_data_orig_label, acc_bd_data_orig_label, acc_bd_data_bd_label = rollout_evaluation(X, y, model, n_rollouts=n_rollouts, pattern=pattern, pattern_size=pattern_size, n_examples_train=n, n_examples_test=n_examples_test, visualize_clf=visualize_clf)
     acc_1[i] = acc_orig_data_orig_label
     acc_2[i] = acc_bd_data_orig_label
     acc_3[i] = acc_bd_data_bd_label
@@ -208,7 +231,7 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
       print("95% Accuracy reached at {} modified training examples.".format(n))
     if data_set_name == 'diabetes' and acc_bd_data_bd_label >= 0.9:
       print("90% Accuracy reached at {} modified training examples.".format(n))
-      break
+      # break
   plt.figure(figsize=(6.4, 4.38))
   plt.plot(n_examples, acc_1, label='orig test data, orig labels')
   plt.plot(n_examples, acc_2, label='mod test data, orig labels')
@@ -219,6 +242,42 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
   plt.legend()
   plt.draw()
 
+
+
+def deepview_visualization(X, y, modified, model, ps, backdoor, n_mod):
+  X = X.to_numpy()
+  y = y.to_numpy()
+  if model.__class__.__name__ != 'RidgeClassifier':
+    pred_wrapper = DeepView.create_simple_wrapper(model.predict_proba)
+  else:
+    pred_wrapper = None
+  batch_size = 32
+  max_samples = 500
+  data_shape = (X.shape[1],)
+  classes = [0, 1]
+  resolution = 300
+  N = 30
+  lam = 0.5
+  # cmap = 'tab20'
+  cmap = 'Dark2'
+  interactive = False
+  if backdoor:
+    if data_set_name == 'mushroom':
+      title = 'RF - Mushroom - Pattern Size: {0} - Backdoor - {1} Modified Training Examples'.format(ps, n_mod)
+    elif data_set_name == 'diabetes':
+      title = 'RF - Diabetes - Pattern Size: {0} - Backdoor - {1} Modified Training Examples'.format(ps, n_mod)
+  else:
+    if data_set_name == 'mushroom':
+      title = 'RF - Mushroom - Pattern Size: {0} - No Backdoor - {1} Modified Training Examples'.format(ps, n_mod)
+    elif data_set_name == 'diabetes':
+      title = 'RF - Diabetes - Pattern Size: {0} - No Backdoor - {1} Modified Training Examples'.format(ps, n_mod)
+  
+  deepview = DeepView(pred_wrapper, classes, max_samples, batch_size, data_shape, N, lam, resolution, cmap, interactive, title=title)
+  # randomly select samples from the data because samples might be sorted by class 
+  rng = np.random.default_rng()
+  samples = rng.choice(X.shape[0], 50, replace=False)
+  deepview.add_samples(X[samples], y[samples], modified[samples])
+  deepview.show()
 
 def load_mushroom_data():
   global data_set_name 
@@ -290,11 +349,7 @@ def load_diabetes_data():
   return X, y
 
 
-# Mutual information:
-
-from sklearn.feature_selection import mutual_info_classif
-
-
+# calculation of the mutual information of the features
 def get_mi_importances(X,y):
   importances = np.zeros(X.shape[1])
   print("Computing mutual information...")
@@ -306,8 +361,6 @@ def get_mi_importances(X,y):
   print("MI: ", mi.argsort().tolist())
   print(type(mi))
   print(mi.shape)
-
-
 
 # get_mi_importances(X,y)
 
@@ -408,7 +461,7 @@ start_time = time.time()
 
 
 # ridge regression
-rrc = RidgeClassifier()
+# rrc = RidgeClassifier(alpha=0)
 # rrc = RidgeClassifier()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Fixed, Pattern Size: 1")
@@ -426,9 +479,7 @@ rrc = RidgeClassifier()
 
 # mutual information
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 1")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=2, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 2")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=4, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 4")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 5")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=1600, title="RidgeClassifier: Mutual Information, Pattern Size: 8")
 
@@ -449,20 +500,13 @@ rrc = RidgeClassifier()
 X, y = load_diabetes_data()
 
 # Random Forest
-random_forest = RandomForestClassifier()
-# random_forest = RandomForestClassifier(max_depth=10)
-
-# random pattern
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=1, n_examples_test=100, title='RandomForest: Random, Pattern Size: 1')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=3, n_examples_test=100, title='RandomForest: Random Pattern Size: 3')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=5, n_examples_test=100, title='RandomForest: Random Pattern Size: 5')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=8, n_examples_test=100, title='RandomForest: Random Pattern Size: 8')
-
+# random_forest = RandomForestClassifier()
+random_forest = RandomForestClassifier(n_estimators=5, max_depth=6)
 
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 5")
+evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=10, title="RandomForest: Fixed, Pattern Size: 5", visualize_clf=True)
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 8")
 
 
@@ -496,13 +540,13 @@ random_forest = RandomForestClassifier()
 # evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RandomForest: Mutual Information, 20 Modified Training Examples")
 
 # 50 modified training examples
-evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Fixed, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Permutation, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Mutual Information, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Fixed, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Permutation, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RandomForest: Mutual Information, 50 Modified Training Examples")
 
 
 # SVM
-svm = svm.SVC()
+# svm = svm.SVC()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="SVM: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="SVM: Fixed, Pattern Size: 3")
@@ -533,15 +577,15 @@ svm = svm.SVC()
 # evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Permutation, 20 Modified Training Examples")
 # evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="SVM: Mutual Information, 20 Modified Training Examples")
 # 50 modified training examples
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Fixed, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Permutation, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Mutual Information, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Fixed, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Permutation, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="SVM: Mutual Information, 50 Modified Training Examples")
 
 
 
 
 # ridge regression
-rrc = RidgeClassifier()
+# rrc = RidgeClassifier()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RidgeClassifier: Fixed, Pattern Size: 3")
@@ -573,9 +617,9 @@ rrc = RidgeClassifier()
 # evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RidgeClassifier: Permutation, 20 Modified Training Examples")
 # evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=20, n_examples_test=100, title="RidgeClassifier: Mutual Information, 20 Modified Training Examples")
 # 50 modified training examples
-evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Fixed, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Permutation, 50 Modified Training Examples")
-evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Mutual Information, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Fixed, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Permutation, 50 Modified Training Examples")
+# evaluate_pattern_size(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_mutual_information', max_pattern_size=10, n_examples_train=50, n_examples_test=100, title="RidgeClassifier: Mutual Information, 50 Modified Training Examples")
 
 end_time = time.time()
 hours, rem = divmod(end_time - start_time, 3600)
