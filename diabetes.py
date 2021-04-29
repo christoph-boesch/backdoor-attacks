@@ -132,11 +132,14 @@ def rollout_evaluation(data, labels, model, n_rollouts=10, pattern='fixed', patt
       least_important_features = [X_train.columns[x] for x in feature_importances]
       # print(least_important_features)
     elif pattern == 'least_important_mutual_information':
-      # Feature importance from low to high based on mutual information, random_state=1
-      if data_set_name == 'mushroom':
-        feature_importances = MUTUAL_INFORMATION_IMPORTANCES_MUSHROOM
+      if CALCULATE_MI_PER_SPLIT:
+        feature_importances = get_mi_importances(X_train, y_train)
       else:
-        feature_importances = MUTUAL_INFORMATION_IMPORTANCES_DIABETES
+        # Feature importance from low to high based on mutual information, random_state=1
+        if data_set_name == 'mushroom':
+          feature_importances = MUTUAL_INFORMATION_IMPORTANCES_MUSHROOM
+        else:
+          feature_importances = MUTUAL_INFORMATION_IMPORTANCES_DIABETES
       least_important_features = [X_train.columns[x] for x in feature_importances]
 
     else:
@@ -187,9 +190,12 @@ def evaluate_pattern_size(X, y, model, n_rollouts, pattern, max_pattern_size, n_
     acc_3[pattern_size] = acc_bd_data_bd_label
     if data_set_name == 'mushroom' and acc_bd_data_bd_label >= 0.95:
       print("95% Accuracy reached at pattern size {}.".format(pattern_size))
+      print("Accuracy of the model on the original data: ", acc_orig_data_orig_label)
+      break
     if data_set_name == 'diabetes' and acc_bd_data_bd_label >= 0.9:
       print("90% Accuracy reached at pattern size {}".format(pattern_size))
-      # break
+      print("Accuracy of the model on the original data: ", acc_orig_data_orig_label)
+      break
 
 
   plt.figure(figsize=(6.4, 4.38))
@@ -215,8 +221,8 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
   # n_examples = n_examples_small
   # n_examples = n_examples_large_mushroom
   # n_examples = n_examples_large
-  # n_examples= np.arange(400, 600, step=5)
-  n_examples = np.array([100, 200])
+  # n_examples= np.arange(180,1000, step=5)
+  n_examples = np.array([1000])
   acc_1 = np.zeros(n_examples.shape[0])
   acc_2 = np.zeros(n_examples.shape[0])
   acc_3 = np.zeros(n_examples.shape[0])
@@ -229,9 +235,12 @@ def evaluate_n_examples(X, y, model, n_rollouts, pattern, pattern_size, n_exampl
     acc_3[i] = acc_bd_data_bd_label
     if data_set_name == 'mushroom' and acc_bd_data_bd_label >= 0.95:
       print("95% Accuracy reached at {} modified training examples.".format(n))
+      print("Accuracy of the model on the original data: ", acc_orig_data_orig_label)
+      break
     if data_set_name == 'diabetes' and acc_bd_data_bd_label >= 0.9:
       print("90% Accuracy reached at {} modified training examples.".format(n))
-      # break
+      print("Accuracy of the model on the original data: ", acc_orig_data_orig_label)
+      break
   plt.figure(figsize=(6.4, 4.38))
   plt.plot(n_examples, acc_1, label='orig test data, orig labels')
   plt.plot(n_examples, acc_2, label='mod test data, orig labels')
@@ -353,22 +362,24 @@ def load_diabetes_data():
 def get_mi_importances(X,y):
   importances = np.zeros(X.shape[1])
   print("Computing mutual information...")
-  for i in range(500):
+  for i in range(30):
+    print("Iteration {}...".format(i))
     mi = mutual_info_classif(X, y)
     feature_importances = mi.argsort().tolist()
     for j, x in enumerate(feature_importances):
       importances[x] += j
+
   print("MI: ", mi.argsort().tolist())
-  print(type(mi))
-  print(mi.shape)
-
-# get_mi_importances(X,y)
+  return mi.argsort().tolist()
 
 
 
+CALCULATE_MI_PER_SPLIT = False
 ################################################## MUSHROOM DATA SET TESTS ##################################################
 
-# X, y = load_mushroom_data()
+X, y = load_mushroom_data()
+
+# get_mi_importances(X,y)
 
 # for i, e in enumerate(list(X)):
 #   print(i, e)
@@ -376,21 +387,16 @@ def get_mi_importances(X,y):
 start_time = time.time()
 # Random Forest
 # random forest with default parameters (n_estimators=100, max_depth=None)
-# random_forest = RandomForestClassifier()
+random_forest = RandomForestClassifier()
 # random forest with 10 trees and a max depth of 5
 # random_forest = RandomForestClassifier(n_estimators=10, max_depth=5)
-
-# random pattern
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=1, n_examples_test=1600, title='RandomForest: Random, Pattern Size: 1')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=3, n_examples_test=1600, title='RandomForest: Random Pattern Size: 3')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=5, n_examples_test=1600, title='RandomForest: Random Pattern Size: 5')
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='random', pattern_size=8, n_examples_test=1600, title='RandomForest: Random Pattern Size: 8')
 
 
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=1600, title="RandomForest: Fixed, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=1600, title="RandomForest: Fixed, Pattern Size: 5")
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 5", visualize_clf=True)
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=1600, title="RandomForest: Fixed, Pattern Size: 8")
 
 
@@ -403,7 +409,7 @@ start_time = time.time()
 # mutual information
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=1, n_examples_test=1600, title="RandomForest: Mutual Information, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=3, n_examples_test=1600, title="RandomForest: Mutual Information, Pattern Size: 3")
-# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=1600, title="RandomForest: Mutual Information, Pattern Size: 5")
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=1600, title="RandomForest: Mutual Information, Pattern Size: 5")#, visualize_clf=True)
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=8, n_examples_test=1600, title="RandomForest: Mutual Information, Pattern Size: 8")
 
 
@@ -419,7 +425,7 @@ start_time = time.time()
 
 # SVM
 # svm with default parameters (C=1)
-# svm = svm.SVC()
+svm = svm.SVC()
 # svm = svm.SVC(C=0.1)
 # evaluate_n_examples(X=X, y=y, model=svm, n_rollouts=30, pattern='least_important_mutual_information', pattern_size=5, n_examples_test=1600, title="SVM: Mutual Information, Pattern Size: 5, C=0.1")
 # svm = svm.SVC(C=0.5)
@@ -462,7 +468,7 @@ start_time = time.time()
 
 # ridge regression
 # rrc = RidgeClassifier(alpha=0)
-# rrc = RidgeClassifier()
+rrc = RidgeClassifier()
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=1600, title="RidgeClassifier: Fixed, Pattern Size: 3")
@@ -471,7 +477,7 @@ start_time = time.time()
 
 
 # permutation importance
-# evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Permutation, Pattern Size: 1")
+evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=1, n_examples_test=1600, title="RidgeClassifier: Permutation, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=3, n_examples_test=1600, title="RidgeClassifier: Permutation, Pattern Size: 3")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=5, n_examples_test=1600, title="RidgeClassifier: Permutation, Pattern Size: 5")
 # evaluate_n_examples(X=X, y=y, model=rrc, n_rollouts=30, pattern='least_important_permutation_explicit', pattern_size=8, n_examples_test=1600, title="RidgeClassifier: Permutation, Pattern Size: 8")
@@ -497,16 +503,16 @@ start_time = time.time()
 
 ################################################## DIABETES DATA SET TESTS ##################################################
 
-X, y = load_diabetes_data()
+# X, y = load_diabetes_data()
 
 # Random Forest
 # random_forest = RandomForestClassifier()
-random_forest = RandomForestClassifier(n_estimators=5, max_depth=6)
+# random_forest = RandomForestClassifier(n_estimators=5, max_depth=6)
 
 # fixed pattern
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=1, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 1")
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=3, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 3")
-evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=10, title="RandomForest: Fixed, Pattern Size: 5", visualize_clf=True)
+# evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=5, n_examples_test=10, title="RandomForest: Fixed, Pattern Size: 5")#, visualize_clf=True)
 # evaluate_n_examples(X=X, y=y, model=random_forest, n_rollouts=30, pattern='fixed', pattern_size=8, n_examples_test=100, title="RandomForest: Fixed, Pattern Size: 8")
 
 
