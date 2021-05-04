@@ -257,6 +257,16 @@ class DeepView:
 		
 		self.mapper.fit(self.distances)
 		self.embedded = self.mapper.transform(self.distances)
+		# print("MIN X: ", np.min(self.embedded[0]))
+		# print("MIN Y: ", np.min(self.embedded[1]))
+		# print("MAX X: ", np.max(self.embedded[0]))
+		# print("MAX Y: ", np.max(self.embedded[1]))
+		# print("Normalizing embedding...")
+		# self.embedded = 10*(self.embedded - np.min(self.embedded))/np.ptp(self.embedded)
+		# print("MIN X AFTER NORMALIZATION: ", np.min(self.embedded[0]))
+		# print("MIN Y AFTER NORMALIZATION: ", np.min(self.embedded[1]))
+		# print("MAX X AFTER NORMALIZATION: ", np.max(self.embedded[0]))
+		# print("MAX Y AFTER NORMALIZATION: ", np.max(self.embedded[1]))
 		self.inverse.fit(self.embedded, self.samples)
 		self.classifier_view = self.compute_grid()
 
