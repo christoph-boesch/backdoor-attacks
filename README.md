@@ -14,7 +14,7 @@ More detailed instructions on how to run specific experiments can be found in th
 
 ## References
 <a id="1">[1]</a> 
-A. Schulz, F. Hinder, and B. Hammer, “DeepView: Visualizing Classification Boundaries of Deep Neural Networks as Scatter Plots Using Discriminative Dimensionality Reduction”, Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence, {IJCAI-20}, 2020.
+[A. Schulz, F. Hinder, and B. Hammer](https://www.ijcai.org/Proceedings/2020/319), “DeepView: Visualizing Classification Boundaries of Deep Neural Networks as Scatter Plots Using Discriminative Dimensionality Reduction”, Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence, {IJCAI-20}, 2020.
 
 <a id="2">[2]</a>
 Leland McInnes, John Healy, and James Melville. Umap: Uniform manifold ap-
