@@ -1,6 +1,6 @@
 # Minimal Backdoor Attacks in Machine Learning Models
 ## Contents of the repository
-[backdoor_attacks.ipynb](backdoor_attacks.ipynb) is the main Jupyter Notebook that contains the code for running the experiments. 
+[backdoor_experiments.ipynb](backdoor_experiments.ipynb) is the main Jupyter Notebook that contains the code for running the experiments. 
 More detailed instructions on how to run specific experiments can be found in the notebook.
 
 [deepview](deepview) contains an implementation of DeepView [[1]](#1) that has been slightly adjusted for the visualization of modified data points.
@@ -13,7 +13,7 @@ More detailed instructions on how to run specific experiments can be found in th
 
 ## Instructions
 1. Download the repository
-2. Run the Jupyter Notebook [backdoor_attacks.ipynb](backdoor_attacks.ipynb) to run the experiments. More detailed instructions on how to run specific experiments    can be found in the notebook.
+2. Run the Jupyter Notebook [backdoor_experiments.ipynb](backdoor_experiments.ipynb) to run the experiments. More detailed instructions on how to run specific experiments    can be found in the notebook.
 3. Run [visualization.ipynb](visualization.ipynb) to recreate the UMAP[[2]](#2) visualizations of the two data sets.
 
 ## References
