@@ -1,5 +1,5 @@
 # Minimal Backdoor Attacks in Machine Learning Models
-## Instructions
+## Contents of the repository
 [backdoor_attacks.ipynb](backdoor_attacks.ipynb) is the main Jupyter Notebook that contains the code for running the experiments. 
 More detailed instructions on how to run specific experiments can be found in the notebook.
 
@@ -11,6 +11,10 @@ More detailed instructions on how to run specific experiments can be found in th
 
 [diabetes_data_upload.csv](diabetes_data_upload.csv) contains the early stage diabetes risk prediction data set [[4]](#4).
 
+## Instructions
+1. Download the repository
+2. Run the Jupyter Notebook [backdoor_attacks.ipynb](backdoor_attacks.ipynb) to run the experiments. More detailed instructions on how to run specific experiments    can be found in the notebook.
+3. Run [visualization.ipynb](visualization.ipynb) to recreate the UMAP[[2]](#2) visualizations of the two data sets.
 
 ## References
 <a id="1">[1]</a> 
