@@ -14,7 +14,7 @@ More detailed instructions on how to run specific experiments can be found in th
 ## Instructions
 1. Download the repository
 2. Run the Jupyter Notebook [backdoor_experiments.ipynb](backdoor_experiments.ipynb) to run the experiments. More detailed instructions on how to run specific experiments    can be found in the notebook.
-3. Run [visualization.ipynb](visualization.ipynb) to recreate the UMAP[[2]](#2) visualizations of the two data sets.
+3. Run [visualization.ipynb](visualization.ipynb) to recreate the UMAP [[2]](#2) visualizations of the two data sets.
 
 ## References
 <a id="1">[1]</a> 
